@@ -40,7 +40,6 @@ log "Запуск скрипта для события: $EVENT"
 # Обработка событий
 case $EVENT in
     TEST)
-# Это нужно исправить
         log "Тестирование подключения к Remnwave..."
         check_api "$REMNAWAVE_API/api/system/stats"
         ;;
@@ -53,7 +52,7 @@ case $EVENT in
     CREATE)
         log "Создание пользователя..."
         {{ service = service.id(us.service_id) }}
-        EXPIRE_DATE=$(date +'%Y-%m-%d %T' --date="{{ us.expire }} UTC - 3 hours + 21 minutes")
+        EXPIRE_DATE=$(date -u +'%Y-%m-%dT%T.000Z' --date="{{ us.expire }} UTC - 3 hours + 21 minutes")
 
         USER_NOTE="{{ user.login }}"
 
@@ -66,6 +65,7 @@ case $EVENT in
                 "trafficLimitStrategy": "MONTH",
                 "expireAt": "$EXPIRE_DATE",
                 "description": "$USER_NOTE",
+                "telegramId": "{{ user.settings.telegram.chat_id }}",
                 "activeUserInbounds": {{ toJson(service.settings.remnawave) }}
             }
 EOF
@@ -90,7 +90,7 @@ EOF
         fi
 
         STATUS_CODE=$(echo "$USER_CFG" | jq -r '.statusCode')
-        if [ "$STATUS_CODE" == "404" ]; then
+        if [ "$STATUS_CODE" == "400" ]; then
             log "Ошибка: Не удалось обновить пользователя. Ответ: $USER_CFG"
             exit 1
         fi
@@ -105,7 +105,7 @@ EOF
 
     ACTIVATE|BLOCK|PROLONGATE|CHANGED)
         log "Обработка события: $EVENT..."
-        EXPIRE_DATE=$(date +'%Y-%m-%d %T' --date="{{ us.expire }} UTC - 3 hours + 21 minutes")
+        EXPIRE_DATE=$(date -u +'%Y-%m-%dT%T.000Z' --date="{{ us.expire }} UTC - 3 hours + 21 minutes")
         {{ uuid = ( storage.read('name', 'vpn_'_ us.id).response.uuid ) || (storage.read('name', 'vpn_mrzb_'_ us.id).response.uuid)  }}
 
 
@@ -126,13 +126,13 @@ EOF
                     -H "Authorization: Bearer $TOKEN")
                 log "Ответ от Remnawave: $USER_CFG"
                 PAYLOAD='{"uuid": "{{ uuid }}", "expireAt": "$EXPIRE_DATE", "status": "ACTIVE"}'
-        PAYLOAD=$(cat <<-EOF
-            {
-                "uuid": "{{ uuid }}",
-                "expireAt": "$EXPIRE_DATE"
-            }
+                PAYLOAD=$(cat <<-EOF
+                    {
+                        "uuid": "{{ uuid }}",
+                        "expireAt": "$EXPIRE_DATE"
+                    }
 EOF
-            )
+                )
                 log "Payload: $PAYLOAD"
                 USER_CFG=$(curl -sk -XPOST \
                     "$REMNAWAVE_API/api/users/update" \
@@ -184,7 +184,7 @@ EOF
 
 
         STATUS_CODE=$(echo "$USER_CFG" | jq -r '.statusCode')
-        if [ "$STATUS_CODE" == "404" ]; then
+        if [ "$STATUS_CODE" == "400" ]; then
             log "Ошибка: Не удалось обновить пользователя. Ответ: $USER_CFG"
             exit 1
         fi
@@ -223,4 +223,4 @@ EOF
         ;;
 esac
 
-log "Работа шаблона завершена."
+log "Скрипт успешно завершен."
